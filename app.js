@@ -34,7 +34,7 @@ const ICONS = {
   user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c0-3.6 3.4-6.5 7.5-6.5s7.5 2.9 7.5 6.5"/></svg>',
   empty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h11"/></svg>',
   alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.5 17a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>',
-  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 4.5 1.5 6 1.5 6h-15S6 12.5 6 8Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>', 
+  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 4.5 1.5 6 1.5 6h-15S6 12.5 6 8Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>',
   userPlus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/><path d="M19 8v6M22 11h-6"/></svg>',
   cash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/></svg>',
   clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>'
@@ -619,7 +619,7 @@ function renderShell(){
     <div class="role-pill"><span class="dot"></span>${ROLE_LABELS[SESSION.role] || 'Guest'} access</div>
     ${cloudDocRef ? `<div class="role-pill" style="background:rgba(255,255,255,0.06);"><span class="dot" style="background:#2F8F5B;"></span>Cloud sync on</div>` : ''}
     <button class="nav-item" id="btnLogout">${ICONS.logout}<span>Log out</span></button>
-    <div class="app-copyright">\u00a9 2026 Naseer@GitHub, Inc.</div>`;
+    <div class="app-copyright">\u00a9 2026 Naseer ISM Android All rights reserved.</div>`;
   document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => navigate(btn.dataset.tab));
   });
@@ -1219,7 +1219,7 @@ function openAnnouncementSendList(ids, message, channel){
 
 function openFeeModal(id, presetStudentId){
   const editing = id ? feeById(id) : null;
-  const presetTypes = ['Tuition','Transport','Hostel','Exam','Previous year outstanding due'];
+  const presetTypes = ['Tuition','Transport','Books','Exam','Previous year outstanding due'];
   const isCustomType = editing && !presetTypes.includes(editing.type);
   openModal({
     title: editing ? `Edit fee ${editing.id}` : 'Add fee record',
@@ -1242,7 +1242,7 @@ function openFeeModal(id, presetStudentId){
         <div class="field"><label>Fee type</label><select id="f_type">
           <option ${editing&&editing.type==='Tuition'?'selected':''}>Tuition</option>
           <option ${editing&&editing.type==='Transport'?'selected':''}>Transport</option>
-          <option ${editing&&editing.type==='Hostel'?'selected':''}>Hostel</option>
+          <option ${editing&&editing.type==='Books'?'selected':''}>Books</option>
           <option ${editing&&editing.type==='Exam'?'selected':''}>Exam</option>
           <option ${editing&&editing.type==='Previous year outstanding due'?'selected':''}>Previous year outstanding due</option>
           <option value="Other" ${isCustomType?'selected':''}>Other</option>
@@ -1432,7 +1432,7 @@ function openPaymentModal(){
           <option value="">All fee types</option>
           <option>Tuition</option>
           <option>Transport</option>
-          <option>Hostel</option>
+          <option>Books</option>
           <option>Exam</option>
           <option>Previous year outstanding due</option>
           <option value="Other">Other</option>
