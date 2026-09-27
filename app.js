@@ -33,8 +33,95 @@ const ICONS = {
   shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5Z"/></svg>',
   user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c0-3.6 3.4-6.5 7.5-6.5s7.5 2.9 7.5 6.5"/></svg>',
   empty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h11"/></svg>',
-  alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.5 17a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>'
+  alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.5 17a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>',
+ /*  bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 4.5 1.5 6 1.5 6h-15S6 12.5 6 8Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>', */
+  userPlus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/><path d="M19 8v6M22 11h-6"/></svg>',
+  cash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>'
 };
+
+/* ---------------------------------------------------------------
+   Alerts — internal Management notifications (separate from the
+   Notifications tab, which messages parents). Each type below can
+   be switched on/off from the Alerts tab. When enabled, an entry is
+   logged to DB.alertLog and, if desktop pop-ups are on and the
+   browser has granted permission, a device notification is shown.
+   --------------------------------------------------------------- */
+const ALERT_TYPES = [
+  { id:'studentEnrolled',        label:'Student enrolled',        icon:'userPlus', desc:'A new student is added to the records.' },
+  { id:'feeBilled',              label:'Fees billed',             icon:'fees',     desc:'A new fee record is created for a student.' },
+  { id:'feeCollected',           label:'Fees collected',          icon:'cash',     desc:'A payment is recorded against a student\u2019s fee.' },
+  { id:'pendingBalanceBiweekly', label:'Pending balance (bi-weekly)', icon:'clock', desc:'A summary of outstanding balances, sent every two weeks.' },
+  { id:'feeDeleted',             label:'Fee record deleted',      icon:'trash',    desc:'A fee record is permanently deleted.' },
+  { id:'paymentDeleted',         label:'Payment record deleted',  icon:'trash',    desc:'A payment record is permanently deleted.' },
+  { id:'studentDeleted',         label:'Student record deleted',  icon:'trash',    desc:'A student record is permanently deleted.' }
+];
+
+function alertTypeMeta(id){ return ALERT_TYPES.find(t => t.id === id); }
+function alertsEnabled(typeId){ return !!(DB.alertSettings && DB.alertSettings[typeId] !== false); }
+
+function logAlert(typeId, title, message){
+  if(!DB || !alertsEnabled(typeId)) return;
+  const entry = {
+    id: 'A' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    type: typeId,
+    title, message,
+    ts: Date.now(),
+    read: false
+  };
+  DB.alertLog.unshift(entry);
+  if(DB.alertLog.length > 200) DB.alertLog.length = 200;
+  saveDB();
+  updateAlertBadge();
+  showDeviceNotification(title, message);
+}
+
+function showDeviceNotification(title, message){
+  if(!DB.alertSettings.desktopPopups) return;
+  if(typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  const opts = { body: message, icon: 'icon-192.png', badge: 'icon-192.png', tag: 'ikhlas-alert' };
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistration().then(reg => {
+      if(reg) reg.showNotification(title, opts);
+      else new Notification(title, opts);
+    }).catch(() => { try{ new Notification(title, opts); }catch(e){} });
+  }else{
+    try{ new Notification(title, opts); }catch(e){}
+  }
+}
+
+function requestAlertPermission(cb){
+  if(typeof Notification === 'undefined'){ toast('This browser does not support notification pop-ups.', true); return; }
+  Notification.requestPermission().then(perm => { if(cb) cb(perm); });
+}
+
+function unreadAlertCount(){
+  return DB && Array.isArray(DB.alertLog) ? DB.alertLog.filter(a => !a.read).length : 0;
+}
+function updateAlertBadge(){
+  const el = document.getElementById('alertBadge');
+  if(!el) return;
+  const n = unreadAlertCount();
+  el.textContent = n > 99 ? '99+' : String(n);
+  el.style.display = n > 0 ? 'inline-flex' : 'none';
+}
+
+function checkBiweeklyDigest(){
+  if(SESSION.role !== 'management' || !DB) return;
+  if(!alertsEnabled('pendingBalanceBiweekly')) return;
+  const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
+  const last = DB.alertSettings.lastBiweeklyDigestAt || 0;
+  if(Date.now() - last < TWO_WEEKS) return;
+  DB.alertSettings.lastBiweeklyDigestAt = Date.now();
+  const withBalance = DB.students.filter(s => feesForStudent(s.id).reduce((sum,f) => sum + computeFee(f).balance, 0) > 0);
+  const total = withBalance.reduce((sum,s) => sum + feesForStudent(s.id).reduce((a,f) => a + computeFee(f).balance, 0), 0);
+  if(withBalance.length){
+    logAlert('pendingBalanceBiweekly', 'Pending balance summary',
+      `${withBalance.length} student(s) currently have a pending fee balance, totalling ${money(total)}.`);
+  }else{
+    saveDB();
+  }
+}
 
 /* ---------------------------------------------------------------
    Seed data — reflects the school's example records
@@ -105,6 +192,15 @@ function backfillDB(data){
       if(typeof s.studentAadhar === 'undefined') s.studentAadhar = '';
     });
   }
+  if(!data.alertSettings){
+    data.alertSettings = {};
+  }
+  ALERT_TYPES.forEach(t => {
+    if(typeof data.alertSettings[t.id] === 'undefined') data.alertSettings[t.id] = true;
+  });
+  if(typeof data.alertSettings.desktopPopups === 'undefined') data.alertSettings.desktopPopups = true;
+  if(typeof data.alertSettings.lastBiweeklyDigestAt === 'undefined') data.alertSettings.lastBiweeklyDigestAt = 0;
+  if(!Array.isArray(data.alertLog)) data.alertLog = [];
   return data;
 }
 function loadDB(){
@@ -123,6 +219,7 @@ function saveDB(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
   if(cloudDocRef){
     cloudDocRef.set({ payload: JSON.stringify(DB), updatedAt: Date.now(), updatedBy: (cloudUser && cloudUser.email) || 'unknown' })
+      .then(() => syncParentPortal())
       .catch(err => { console.error('Cloud sync failed', err); toast('Saved locally, but could not sync to the cloud — check your connection.', true); });
   }
 }
@@ -205,6 +302,52 @@ function wireCloudSignIn(){
 function signOutOfCloud(){
   if(typeof firebase === 'undefined') return;
   firebase.auth().signOut();
+}
+
+/* ---------------------------------------------------------------
+   Parent Portal sync — pushes a per-student, parent-safe summary
+   (never Aadhaar numbers) to its own Firestore collection, plus a
+   shared school-branding doc, so the separate parent-app.md can log
+   a parent in with Admission No. + date of birth. See README.md >
+   "Parent Portal" for the Firestore collections and security rules
+   this depends on. A no-op unless cloud sync is on and signed in.
+   --------------------------------------------------------------- */
+function dobDigits(dob){ return String(dob || '').replace(/-/g, ''); }
+function parentDocId(student){ return `${student.id}__${dobDigits(student.dob)}`; }
+
+function syncParentPortal(){
+  if(!cloudDocRef || typeof firebase === 'undefined') return;
+  const fs = firebase.firestore();
+  const withDob = DB.students.filter(s => s.dob);
+  if(withDob.length){
+    const batch = fs.batch();
+    withDob.forEach(s => {
+      const fees = feesForStudent(s.id).map(f => {
+        const c = computeFee(f);
+        return { id:f.id, type:f.type, year:f.year, net:c.net, paid:c.paid, balance:c.balance, status:c.status };
+      });
+      const payments = DB.payments.filter(p => p.studentId === s.id).map(p => {
+        const fee = feeById(p.feeId);
+        return { date:p.date, amount:p.amount, method:p.method, receipt:p.receipt, feeType: fee ? fee.type : '' };
+      });
+      const ref = fs.collection('parent_portal').doc(parentDocId(s));
+      batch.set(ref, {
+        admissionNo: s.id, name: s.name, class: s.class, section: s.section || '', dob: s.dob,
+        fatherName: s.fatherName || '', motherName: s.motherName || '',
+        phone: s.phone || '', address: s.address || '', admissionDate: s.admissionDate || '',
+        fees, payments, updatedAt: Date.now()
+      });
+    });
+    batch.commit().catch(err => console.error('Parent portal sync failed', err));
+  }
+  fs.collection('parent_portal_meta').doc('school').set({
+    name: DB.school.name || '', address: DB.school.address || '',
+    phone: DB.school.phone || '', logo: DB.school.logo || '', countryCode: DB.school.countryCode || '91'
+  }).catch(err => console.error('Parent portal branding sync failed', err));
+}
+function deleteParentDoc(docId){
+  if(!cloudDocRef || typeof firebase === 'undefined' || !docId) return;
+  firebase.firestore().collection('parent_portal').doc(docId).delete().catch(() => {});
 }
 
 /* ---------------------------------------------------------------
@@ -451,6 +594,7 @@ const NAV_ITEMS = [
   { id:'payments',  label:'Payments',  icon:'payments',   roles:['management','feepayments'] },
   { id:'accounts',  label:'Accounts',  icon:'accounts',   roles:['management'] },
   { id:'reports',   label:'Reports',   icon:'reports',    roles:['management','teacher'] },
+  { id:'notifications', label:'Notifications', icon:'bell', roles:['management'] },
   { id:'settings',  label:'Settings',  icon:'settings',   roles:['management'] }
 ];
 
@@ -460,6 +604,7 @@ function showApp(){
   renderShell();
   const firstTab = NAV_ITEMS.find(i => i.roles.includes(SESSION.role));
   navigate(firstTab ? firstTab.id : 'students');
+  checkBiweeklyDigest();
 }
 
 function renderShell(){
@@ -481,11 +626,28 @@ function renderShell(){
   document.getElementById('btnLogout').addEventListener('click', logout);
 }
 
+// The Alerts bell is only meaningful on the Dashboard (a quick glance
+// at recent activity), so it's shown/hidden per tab here rather than
+// rendered once in renderShell.
+function renderTopbarActions(tab){
+  const actions = document.getElementById('topbarActions');
+  if(!actions) return;
+  const showBell = SESSION.role === 'management' && tab === 'dashboard';
+  actions.innerHTML = showBell
+    ? `<button class="topbar-bell" id="btnTopbarBell" aria-label="Alerts" title="Alerts">${ICONS.bell}<span class="nav-badge" id="alertBadge" style="display:none;"></span></button>`
+    : '';
+  const bellBtn = document.getElementById('btnTopbarBell');
+  if(bellBtn) bellBtn.addEventListener('click', openRecentActivityModal);
+  updateAlertBadge();
+}
+
 function navigate(tab, params){
+  if(notifHistoryUnsub && tab !== 'notifications'){ notifHistoryUnsub(); notifHistoryUnsub = null; }
   VIEW = { tab, params: params || {} };
   document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tab);
   });
+  renderTopbarActions(tab);
   const renderers = {
     dashboard: renderDashboard,
     students: renderStudents,
@@ -494,6 +656,7 @@ function navigate(tab, params){
     payments: renderPayments,
     accounts: renderAccounts,
     reports: renderReports,
+    notifications: renderNotifications,
     settings: renderSettings
   };
   (renderers[tab] || renderDashboard)();
@@ -633,7 +796,6 @@ function renderStudentsShell(){
 function renderStudentsTable(){
   const canEdit = can('edit-students');
   const canDelete = SESSION.role === 'management';
-  const isTeacher = SESSION.role === 'teacher';
   let list = DB.students.filter(s => {
     const q = studentFilter.q.trim().toLowerCase();
     const matchQ = !q || s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q);
@@ -642,18 +804,14 @@ function renderStudentsTable(){
   });
   const area = document.getElementById('studentsTableArea');
   if(!area) return;
-  const headCols = isTeacher
-    ? `<th>Admission No.</th><th>Name</th><th>Class</th><th>Section</th><th>Date of birth</th><th>Student's Aadhaar</th><th>Father's name</th><th>Father's Aadhaar</th><th>Mother's name</th><th>Mother's Aadhaar</th><th>Phone</th><th></th>`
-    : `<th>Admission No.</th><th>Name</th><th>Class</th><th>Section</th><th>Father's name</th><th>Phone</th><th></th>`;
+  const headCols = `<th>Admission No.</th><th>Name</th><th>Class &amp; Section</th><th>Date of birth</th><th>Student's Aadhaar</th><th>Father's name</th><th>Father's Aadhaar</th><th>Mother's name</th><th>Mother's Aadhaar</th><th>Phone</th><th></th>`;
   area.innerHTML = list.length ? `<div class="table-wrap"><table>
       <thead><tr>${headCols}</tr></thead>
       <tbody>
         ${list.map(s => `<tr>
           <td>${esc(s.id)}</td>
           <td>${esc(s.name)}</td>
-          <td>${esc(s.class)}</td>
-          <td>${esc(s.section)}</td>
-          ${isTeacher ? `
+          <td>${esc(s.class)}${s.section ? ('-' + esc(s.section)) : ''}</td>
           <td>${fmtDate(s.dob)}</td>
           <td>${esc(s.studentAadhar)||'\u2014'}</td>
           <td>${esc(s.fatherName)}</td>
@@ -661,10 +819,6 @@ function renderStudentsTable(){
           <td>${esc(s.motherName)||'\u2014'}</td>
           <td>${esc(s.motherAadhar)||'\u2014'}</td>
           <td>${esc(s.phone)}</td>
-          ` : `
-          <td>${esc(s.fatherName)}</td>
-          <td>${esc(s.phone)}</td>
-          `}
           <td><div class="row-actions">
             <button class="btn btn-sm btn-ghost" data-view="${s.id}" title="View profile">${ICONS.eye}</button>
             <button class="btn btn-sm btn-ghost" data-msg="${s.id}" title="Message parent">${ICONS.whatsapp}</button>
@@ -762,14 +916,18 @@ function openStudentModal(id){
         address: document.getElementById('f_address').value.trim(),
         admissionDate: document.getElementById('f_admission').value
       };
+      const oldParentDocId = (editing && editing.dob) ? parentDocId(editing) : null;
       if(editing){
         Object.assign(editing, rec);
         toast('Student updated.');
       }else{
         DB.students.push(rec);
         toast('Student added.');
+        logAlert('studentEnrolled', 'Student enrolled', `${rec.name} (Admission No. ${rec.id}) was enrolled in Class ${rec.class}${rec.section ? '-' + rec.section : ''}.`);
       }
       saveDB();
+      const newParentDocId = rec.dob ? parentDocId(rec) : null;
+      if(oldParentDocId && oldParentDocId !== newParentDocId) deleteParentDoc(oldParentDocId);
       if(VIEW.tab === 'student-profile') renderStudentProfile(); else renderStudentsShell();
       return true;
     }
@@ -781,6 +939,17 @@ function confirmDeleteStudent(id){
   const s = studentById(id);
   if(!s) return;
   const hasFees = DB.fees.some(f => f.studentId === id);
+  const outstandingBalance = feesForStudent(id).reduce((sum,f) => sum + computeFee(f).balance, 0);
+  if(outstandingBalance > 0){
+    openModal({
+      title: 'Cannot delete student',
+      body: `<div class="modal-note danger">${ICONS.alert}${esc(s.name)} (${esc(s.id)}) has an outstanding fee balance of ${money(outstandingBalance)}. Clear all dues before deleting this student.</div>`,
+      confirmLabel: 'OK',
+      extraButtons: [],
+      onConfirm: () => true
+    });
+    return;
+  }
   openModal({
     title: 'Delete student?',
     body: `<div class="modal-note danger">${ICONS.alert}This removes ${esc(s.name)} (${esc(s.id)}) permanently.</div>
@@ -788,8 +957,11 @@ function confirmDeleteStudent(id){
     confirmLabel: 'Delete student',
     danger: true,
     onConfirm: () => {
+      const oldParentDocId = s.dob ? parentDocId(s) : null;
       DB.students = DB.students.filter(x => x.id !== id);
       saveDB();
+      if(oldParentDocId) deleteParentDoc(oldParentDocId);
+      logAlert('studentDeleted', 'Student record deleted', `${s.name} (Admission No. ${s.id}) was permanently deleted.`);
       toast('Student deleted.');
       navigate('students');
       return true;
@@ -844,6 +1016,14 @@ function renderStudentProfile(){
     </div>
 
     ${SESSION.role === 'management' ? `
+    <div class="panel">
+      <div class="panel-body">
+        <div class="section-title" style="margin:0 0 8px;">Parent app access</div>
+        ${s.dob
+          ? `<p class="small-note">Share these with the parent to sign in to the Parent Portal app: <b>Admission No. ${esc(s.id)}</b> and <b>date of birth ${fmtDate(s.dob)}</b>.</p>`
+          : `<p class="small-note" style="color:var(--danger);">${ICONS.alert} This student has no date of birth on file, so the Parent Portal app can't create a login for them yet. Add one from Edit.</p>`}
+      </div>
+    </div>
     <div class="stat-grid">
       <div class="stat-card"><div class="label">Total billed</div><div class="value">${money(totals.net)}</div></div>
       <div class="stat-card success"><div class="label">Paid</div><div class="value">${money(totals.paid)}</div></div>
@@ -1107,6 +1287,7 @@ function openFeeModal(id, presetStudentId){
         rec.id = nextId('F', DB.fees, 3);
         DB.fees.push(rec);
         toast('Fee record added.');
+        logAlert('feeBilled', 'Fee billed', `${rec.type} fee of ${money(amount - discount)} was billed to ${studentName(studentId)} (${studentId}).`);
       }
       saveDB();
       if(VIEW.tab === 'student-profile') renderStudentProfile(); else renderFeesTable();
@@ -1145,6 +1326,7 @@ function confirmDeleteFee(id){
       DB.payments = DB.payments.filter(p => p.feeId !== id);
       saveDB();
       toast('Fee record deleted.');
+      logAlert('feeDeleted', 'Fee record deleted', `Fee ${f.id} (${f.type}, ${money(f.amount)}) for ${studentName(f.studentId)} (${f.studentId}) was deleted.${linkedPayments ? ` ${linkedPayments} linked payment(s) were also removed.` : ''}`);
       renderFeesTable();
       return true;
     }
@@ -1178,7 +1360,7 @@ function renderPaymentsShell(){
 }
 function renderPaymentsTable(){
   const canDelete = SESSION.role === 'management';
-  let list = [...DB.payments].sort((a,b) => b.date.localeCompare(a.date)).filter(p => {
+  let list = [...DB.payments].sort((a,b) => b.receipt.localeCompare(a.receipt, undefined, {numeric:true, sensitivity:'base'})).filter(p => {
     const q = paymentFilter.q.trim().toLowerCase();
     return !q || studentName(p.studentId).toLowerCase().includes(q) || p.receipt.toLowerCase().includes(q) || p.id.toLowerCase().includes(q);
   });
@@ -1241,7 +1423,7 @@ function sendPaymentMessage(paymentId, kind){
 }
 
 function openPaymentModal(){
-  if(!DB.fees.length){ toast('Add a fee record first.', true); return; }
+  if(!DB.fees.length && !DB.students.length){ toast('Add a student first.', true); return; }
   openModal({
     title: 'Record a payment',
     body: `
@@ -1267,6 +1449,7 @@ function openPaymentModal(){
           <input type="hidden" id="p_fee">
           <div class="searchable-select-list" id="p_feeList"></div>
         </div>
+        <p class="small-note" id="p_otherNote" style="display:none;">For "Other", pick the student directly \u2014 you don't need an existing fee record. Enter the fee type above and it will be recorded as a new one-off charge.</p>
       </div>
       <div class="field-row">
         <div class="field"><label>Payment date</label><input type="date" id="p_date" value="${new Date().toISOString().slice(0,10)}"></div>
@@ -1280,17 +1463,32 @@ function openPaymentModal(){
     `,
     confirmLabel: 'Record payment',
     onConfirm: () => {
-      const feeId = document.getElementById('p_fee').value;
+      const selected = document.getElementById('p_fee').value;
       const errEl = document.getElementById('p_error');
-      if(!feeId){ errEl.style.display='block'; errEl.textContent = 'Choose a student / fee to pay towards.'; return false; }
+      const typeFilter = document.getElementById('p_feeTypeFilter').value;
+      const customType = document.getElementById('p_feeTypeOther').value.trim();
+      if(!selected){ errEl.style.display='block'; errEl.textContent = 'Choose a student / fee to pay towards.'; return false; }
       const amount = Number(document.getElementById('p_amount').value);
-      const f = feeById(feeId);
-      const c = computeFee(f);
       if(!amount || amount <= 0){ errEl.style.display='block'; errEl.textContent = 'Enter an amount greater than zero.'; return false; }
-      if(amount > c.balance){ errEl.style.display='block'; errEl.textContent = `Amount exceeds the remaining balance of ${money(c.balance)}.`; return false; }
+
+      let f;
+      if(selected.indexOf('student:') === 0){
+        // "Other" fee type with no existing fee record: create the charge on the fly.
+        if(typeFilter !== 'Other' || !customType){ errEl.style.display='block'; errEl.textContent = 'Enter the fee type for this "Other" charge.'; return false; }
+        const studentId = selected.slice('student:'.length);
+        if(!studentById(studentId)){ errEl.style.display='block'; errEl.textContent = 'Choose a student / fee to pay towards.'; return false; }
+        f = { id: nextId('F', DB.fees, 3), studentId, year:'2026-27', type: customType, amount, discount:0, discountReason:'' };
+        DB.fees.push(f);
+      }else{
+        f = feeById(selected);
+        if(!f){ errEl.style.display='block'; errEl.textContent = 'Choose a student / fee to pay towards.'; return false; }
+        const c = computeFee(f);
+        if(amount > c.balance){ errEl.style.display='block'; errEl.textContent = `Amount exceeds the remaining balance of ${money(c.balance)}.`; return false; }
+      }
+
       const rec = {
         id: nextId('P', DB.payments, 3),
-        feeId,
+        feeId: f.id,
         studentId: f.studentId,
         date: document.getElementById('p_date').value,
         amount,
@@ -1300,6 +1498,7 @@ function openPaymentModal(){
       DB.payments.push(rec);
       saveDB();
       toast('Payment recorded.');
+      logAlert('feeCollected', 'Fee payment received', `${money(rec.amount)} received from ${studentName(rec.studentId)} (${rec.studentId}) towards ${f.type}, via ${rec.method}. Receipt ${rec.receipt}.`);
       if(VIEW.tab === 'student-profile') renderStudentProfile(); else renderPaymentsTable();
       setTimeout(() => promptSendPaymentMessage(rec.id), 200);
       return true;
@@ -1326,12 +1525,26 @@ function openPaymentModal(){
     });
     feeItems.length = 0;
     feeItems.push(...filtered);
+    if(typeFilter === 'Other'){
+      // Let management pick a student directly and record a one-off "Other" charge
+      // even when no fee record exists for them yet.
+      DB.students.forEach(s => {
+        feeItems.push({
+          value: `student:${s.id}`,
+          label: `${s.name} \u2014 new "Other" charge`,
+          sub: `Admission No. ${s.id}${customType ? ' \u00b7 ' + document.getElementById('p_feeTypeOther').value.trim() : ' \u00b7 enter fee type above'}`,
+          searchText: `${s.name} ${s.id}`.toLowerCase()
+        });
+      });
+    }
   }
   buildFeeItems();
   initSearchableSelect('p_feeInput', 'p_feeList', 'p_fee', feeItems);
 
   document.getElementById('p_feeTypeFilter').addEventListener('change', (e) => {
-    document.getElementById('p_feeTypeOtherWrap').style.display = e.target.value === 'Other' ? 'block' : 'none';
+    const isOther = e.target.value === 'Other';
+    document.getElementById('p_feeTypeOtherWrap').style.display = isOther ? 'block' : 'none';
+    document.getElementById('p_otherNote').style.display = isOther ? 'block' : 'none';
     buildFeeItems();
     document.getElementById('p_feeInput').value = '';
     document.getElementById('p_fee').value = '';
@@ -1341,15 +1554,20 @@ function openPaymentModal(){
 
 function confirmDeletePayment(id){
   if(SESSION.role !== 'management') return;
+  const deletedPayment = DB.payments.find(x => x.id === id);
   openModal({
     title: 'Delete payment record?',
     body: `<div class="modal-note danger">${ICONS.alert}This deletes the payment and recalculates the fee balance.</div>`,
     confirmLabel: 'Delete payment',
     danger: true,
     onConfirm: () => {
-      DB.payments = DB.payments.filter(p => p.id !== id);
+      DB.payments = DB.payments.filter(x => x.id !== id);
       saveDB();
       toast('Payment deleted.');
+      if(deletedPayment){
+        const fee = feeById(deletedPayment.feeId);
+        logAlert('paymentDeleted', 'Payment record deleted', `Payment ${deletedPayment.id} of ${money(deletedPayment.amount)} for ${studentName(deletedPayment.studentId)} (${deletedPayment.studentId})${fee ? ` towards ${fee.type}` : ''} was deleted.`);
+      }
       renderPaymentsTable();
       return true;
     }
@@ -1634,10 +1852,352 @@ function paintReportBody(){
 }
 
 /* ---------------------------------------------------------------
+   Notifications — sends fee reminders and announcements that show
+   up in the separate Parent Portal app (parent-app/). Requires
+   cloud sync to be on and signed in, since that's the only channel
+   parents' devices share with this one. See README.md > "Parent
+   Portal" for the Firestore collection and security rules this
+   needs.
+   --------------------------------------------------------------- */
+let notifHistoryUnsub = null;
+
+function renderNotifications(){
+  setTopbar('Notifications', 'Send fee reminders and announcements to the Parent Portal app');
+  if(!cloudDocRef){
+    setContent(`<div class="empty-state">${ICONS.bell}<h3>Cloud sync required</h3><p>Parent notifications are delivered through cloud sync. Turn it on and sign in first \u2014 see firebase-config.js and Settings.</p></div>`);
+    return;
+  }
+  const classes = [...new Set(DB.students.map(s => s.class).filter(Boolean))].sort();
+  setContent(`
+    <div class="panel">
+      <div class="panel-body">
+        <div class="section-title" style="margin-top:0;">Send a notice</div>
+        <div class="field-row">
+          <div class="field"><label>Type</label>
+            <select id="n_kind">
+              <option value="announcement">General announcement</option>
+              <option value="fee_reminder">Fee reminder</option>
+            </select>
+          </div>
+          <div class="field"><label>Audience</label>
+            <select id="n_audienceType">
+              <option value="all">All parents</option>
+              <option value="class">Specific class</option>
+              <option value="student">Specific student</option>
+            </select>
+          </div>
+        </div>
+        <div class="field" id="n_classWrap" style="display:none;">
+          <label>Class</label>
+          <select id="n_class">${classes.map(c => `<option value="${esc(c)}">Class ${esc(c)}</option>`).join('')}</select>
+        </div>
+        <div class="field" id="n_studentWrap" style="display:none;">
+          <label>Student</label>
+          <div class="searchable-select">
+            <input type="text" id="n_studentInput" placeholder="Search by name or admission no." autocomplete="off">
+            <input type="hidden" id="n_student">
+            <div class="searchable-select-list" id="n_studentList"></div>
+          </div>
+        </div>
+        <div class="field"><label>Title</label><input type="text" id="n_title" placeholder="e.g. Fee reminder \u2014 Term 2"></div>
+        <div class="field"><label>Message</label><textarea id="n_message" rows="4" placeholder="Write your message..."></textarea></div>
+        <p class="small-note" id="n_preview" style="margin-bottom:12px;"></p>
+        <button class="btn btn-primary" id="btnSendNotif">${ICONS.bell}Send notice</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div><h3>Recently sent</h3><div class="sub">Newest first, visible to parents in the app</div></div></div>
+      <div class="panel-body pad0" id="notifHistory"><div class="empty-state">${ICONS.empty}<p>Loading\u2026</p></div></div>
+    </div>
+  `);
+  wireNotificationComposer();
+  loadNotificationHistory();
+}
+
+function resolveNotifAudience(){
+  const kind = document.getElementById('n_kind').value;
+  const audType = document.getElementById('n_audienceType').value;
+  let candidates;
+  if(audType === 'all') candidates = DB.students.slice();
+  else if(audType === 'class'){
+    const cls = document.getElementById('n_class').value;
+    candidates = DB.students.filter(s => s.class === cls);
+  }else{
+    const sid = document.getElementById('n_student').value;
+    candidates = DB.students.filter(s => s.id === sid);
+  }
+  if(kind === 'fee_reminder' && audType !== 'student'){
+    candidates = candidates.filter(s => feesForStudent(s.id).reduce((sum,f) => sum + computeFee(f).balance, 0) > 0);
+  }
+  return { kind, audType, candidates };
+}
+
+function wireNotificationComposer(){
+  const kindSel = document.getElementById('n_kind');
+  const audSel = document.getElementById('n_audienceType');
+  const classWrap = document.getElementById('n_classWrap');
+  const studentWrap = document.getElementById('n_studentWrap');
+  const classSel = document.getElementById('n_class');
+  const titleInput = document.getElementById('n_title');
+  const msgInput = document.getElementById('n_message');
+  const preview = document.getElementById('n_preview');
+
+  const items = DB.students.map(s => ({
+    value: s.id, label: `${s.name} (Admission No. ${s.id})`,
+    sub: `Class ${s.class}${s.section ? '-' + s.section : ''}`,
+    searchText: `${s.name} ${s.id}`.toLowerCase()
+  }));
+  initSearchableSelect('n_studentInput', 'n_studentList', 'n_student', items, { onSelect: updatePreview });
+
+  function applyTemplate(){
+    if(kindSel.value === 'fee_reminder' && !titleInput.dataset.touched){
+      titleInput.value = 'Fee reminder';
+      msgInput.value = 'Dear Parent,\n\nThis is a reminder that a balance remains on your child\u2019s school fees. Kindly visit the school office to clear the pending amount at your earliest convenience.\n\nThank you.';
+    }
+  }
+  function updatePreview(){
+    const { kind, candidates } = resolveNotifAudience();
+    if(kind === 'fee_reminder'){
+      const total = candidates.reduce((sum,s) => sum + feesForStudent(s.id).reduce((a,f) => a + computeFee(f).balance, 0), 0);
+      preview.textContent = candidates.length
+        ? `Will notify ${candidates.length} parent(s), covering ${money(total)} outstanding.`
+        : 'No students in this selection currently have a pending balance.';
+    }else{
+      preview.textContent = candidates.length ? `Will notify ${candidates.length} parent(s).` : 'Choose a student to notify.';
+    }
+  }
+  function updateVisibility(){
+    classWrap.style.display = audSel.value === 'class' ? 'block' : 'none';
+    studentWrap.style.display = audSel.value === 'student' ? 'block' : 'none';
+    updatePreview();
+  }
+
+  titleInput.addEventListener('input', () => { titleInput.dataset.touched = '1'; });
+  kindSel.addEventListener('change', () => { applyTemplate(); updatePreview(); });
+  audSel.addEventListener('change', updateVisibility);
+  classSel.addEventListener('change', updatePreview);
+  document.getElementById('btnSendNotif').addEventListener('click', sendNotification);
+  updateVisibility();
+}
+
+function sendNotification(){
+  const title = document.getElementById('n_title').value.trim();
+  const message = document.getElementById('n_message').value.trim();
+  if(!title || !message){ toast('Enter a title and message.', true); return; }
+  const { kind, audType, candidates } = resolveNotifAudience();
+  if(!candidates.length){
+    toast(kind === 'fee_reminder' ? 'No students in this selection currently have a pending balance.' : 'Choose a student.', true);
+    return;
+  }
+  const audience = kind === 'fee_reminder'
+    ? { type:'students', ids: candidates.map(s => s.id) }
+    : audType === 'all' ? { type:'all' }
+    : audType === 'class' ? { type:'class', class: document.getElementById('n_class').value }
+    : { type:'students', ids: candidates.map(s => s.id) };
+  const totalOutstanding = kind === 'fee_reminder'
+    ? candidates.reduce((sum,s) => sum + feesForStudent(s.id).reduce((a,f) => a + computeFee(f).balance, 0), 0)
+    : null;
+
+  openModal({
+    title: 'Send this notice?',
+    body: `<p>This will be sent to <b>${candidates.length}</b> ${candidates.length === 1 ? 'parent' : 'parents'}${totalOutstanding != null ? `, covering a total outstanding of <b>${money(totalOutstanding)}</b>` : ''}.</p>
+           <p class="small-note" style="margin-top:10px;"><b>${esc(title)}</b><br>${esc(message)}</p>`,
+    confirmLabel: 'Send now',
+    onConfirm: () => {
+      firebase.firestore().collection('notifications').add({
+        kind, audience, title, message,
+        recipientCount: candidates.length,
+        totalOutstanding,
+        createdAt: Date.now(),
+        createdBy: (cloudUser && cloudUser.email) || 'unknown'
+      }).then(() => { toast('Notice sent.'); renderNotifications(); })
+        .catch(err => { console.error('Send failed', err); toast('Could not send \u2014 check your connection.', true); });
+      return true;
+    }
+  });
+}
+
+function audienceLabel(aud){
+  if(!aud || aud.type === 'all') return 'All parents';
+  if(aud.type === 'class') return `Class ${aud.class}`;
+  if(aud.type === 'students') return `${(aud.ids||[]).length} student(s)`;
+  return '';
+}
+
+function loadNotificationHistory(){
+  if(notifHistoryUnsub){ notifHistoryUnsub(); notifHistoryUnsub = null; }
+  notifHistoryUnsub = firebase.firestore().collection('notifications').orderBy('createdAt','desc').limit(20)
+    .onSnapshot(snap => {
+      const target = document.getElementById('notifHistory');
+      if(!target) return;
+      const docs = snap.docs.map(d => d.data());
+      target.innerHTML = docs.length ? `<div class="notif-history">${docs.map(n => `
+        <div class="notif-history-row">
+          <div class="nh-top">
+            <span class="tag ${n.kind==='fee_reminder' ? 'tag-partial' : 'tag-paid'}">${n.kind==='fee_reminder' ? 'Fee reminder' : 'Announcement'}</span>
+            <span class="nh-time">${n.createdAt ? new Date(n.createdAt).toLocaleString('en-IN') : ''}</span>
+          </div>
+          <div class="nh-title">${esc(n.title||'')}</div>
+          <div class="nh-msg">${esc(n.message||'')}</div>
+          <div class="nh-meta">${esc(audienceLabel(n.audience))} \u00b7 ${n.recipientCount||0} recipient(s)${n.totalOutstanding!=null ? ` \u00b7 ${money(n.totalOutstanding)} outstanding` : ''}</div>
+        </div>`).join('')}</div>`
+        : `<div class="empty-state">${ICONS.empty}<p>No notices sent yet.</p></div>`;
+    }, err => console.error('Notification history listener error', err));
+}
+
+/* ---------------------------------------------------------------
+   Alerts — internal Management notifications. "Recent activity" is
+   shown on the Dashboard only, via the topbar bell's own modal
+   (openRecentActivityModal). "Alert types" lives behind the gear
+   icon next to the Recent activity label there, as its own
+   modal (openAlertTypesModal).
+   --------------------------------------------------------------- */
+function alertPopupPermissionNote(){
+  const permission = (typeof Notification !== 'undefined') ? Notification.permission : 'unsupported';
+  return permission === 'granted'
+    ? `<span class="tag tag-active">Pop-ups allowed</span>`
+    : permission === 'denied'
+      ? `<span class="tag tag-pending">Pop-ups blocked in browser settings</span>`
+      : permission === 'unsupported'
+        ? `<span class="tag tag-inactive">Not supported on this device</span>`
+        : `<span class="tag tag-partial">Pop-ups not yet allowed</span>`;
+}
+
+// Markup for the on/off switches for each alert type. Shared by the
+// Settings page and the "Alert types" modal opened from the gear icon
+// next to Recent activity.
+function alertTypeRowsHTML(){
+  const permission = (typeof Notification !== 'undefined') ? Notification.permission : 'unsupported';
+  return `
+    <div class="panel-body pad0">
+      ${ALERT_TYPES.map(t => `
+        <div class="alert-type-row">
+          <div class="atr-icon">${ICONS[t.icon] || ICONS.bell}</div>
+          <div class="atr-text"><div class="atr-label">${esc(t.label)}</div><div class="atr-desc">${esc(t.desc)}</div></div>
+          <label class="switch"><input type="checkbox" class="alertTypeToggle" data-type="${t.id}" ${DB.alertSettings[t.id] !== false ? 'checked' : ''}><span class="slider"></span></label>
+        </div>
+      `).join('')}
+      <div class="alert-type-row">
+        <div class="atr-icon">${ICONS.bell}</div>
+        <div class="atr-text"><div class="atr-label">Show pop-up on this device</div><div class="atr-desc">Also show a device notification when an enabled alert happens, while the app is open. ${alertPopupPermissionNote()}</div></div>
+        <label class="switch"><input type="checkbox" id="desktopPopupsToggle" ${DB.alertSettings.desktopPopups !== false ? 'checked' : ''}><span class="slider"></span></label>
+      </div>
+    </div>
+    ${permission === 'default' ? `<div class="panel-body" style="padding-top:0;"><button class="btn btn-primary" id="btnEnablePopups">${ICONS.bell}Allow pop-up notifications</button></div>` : ''}
+  `;
+}
+
+// Wires whatever alert-type toggles are currently in the DOM \u2014 works
+// whether they're on the Settings page or inside the Alert types modal.
+function wireAlertTypeToggles(onChangeRerender){
+  document.querySelectorAll('.alertTypeToggle').forEach(cb => {
+    cb.addEventListener('change', () => {
+      DB.alertSettings[cb.dataset.type] = cb.checked;
+      saveDB();
+      toast(cb.checked ? `${alertTypeMeta(cb.dataset.type).label} alerts turned on.` : `${alertTypeMeta(cb.dataset.type).label} alerts turned off.`);
+    });
+  });
+  const popupsToggle = document.getElementById('desktopPopupsToggle');
+  if(popupsToggle){
+    popupsToggle.addEventListener('change', () => {
+      DB.alertSettings.desktopPopups = popupsToggle.checked;
+      saveDB();
+      if(popupsToggle.checked && typeof Notification !== 'undefined' && Notification.permission === 'default'){
+        requestAlertPermission(onChangeRerender);
+      }
+    });
+  }
+  const enableBtn = document.getElementById('btnEnablePopups');
+  if(enableBtn){
+    enableBtn.addEventListener('click', () => requestAlertPermission(onChangeRerender));
+  }
+}
+
+// Opens "Alert types" as its own modal \u2014 reached via the gear icon
+// next to the Recent activity label in the bell's popover.
+function openAlertTypesModal(){
+  openModal({
+    title: 'Alert types',
+    body: `<p class="small-note" style="margin-bottom:12px;">Switch off any you don't need \u2014 switched-off types are neither logged nor shown as pop-ups.</p>${alertTypeRowsHTML()}`,
+    confirmLabel: 'Done',
+    onConfirm: () => true
+  });
+  wireAlertTypeToggles(() => { openAlertTypesModal(); });
+}
+
+// Markup for just the activity list rows. Shared by the Settings page
+// and the Recent activity modal opened from the topbar bell.
+function recentActivityRowsHTML(){
+  return DB.alertLog.length ? `<div class="notif-history">${DB.alertLog.map(a => {
+    const meta = alertTypeMeta(a.type);
+    return `<div class="notif-history-row alert-row${a.read ? '' : ' unread'}">
+      <div class="nh-top">
+        <span class="tag tag-partial">${meta ? ICONS[meta.icon] || '' : ''}${esc(meta ? meta.label : a.type)}</span>
+        <span class="nh-time">${new Date(a.ts).toLocaleString('en-IN')}</span>
+      </div>
+      <div class="nh-title">${esc(a.title)}</div>
+      <div class="nh-msg">${esc(a.message)}</div>
+    </div>`;
+  }).join('')}</div>` : `<div class="empty-state">${ICONS.empty}<p>No activity yet. Alerts will appear here as students, fees and payments are recorded.</p></div>`;
+}
+
+function clearActivityLog(onCleared){
+  openModal({
+    title: 'Clear activity log?',
+    body: `<div class="modal-note danger">${ICONS.alert}This removes all logged alerts from this device. Alert type settings are kept.</div>`,
+    confirmLabel: 'Clear log',
+    danger: true,
+    onConfirm: () => {
+      DB.alertLog = [];
+      saveDB();
+      toast('Activity log cleared.');
+      onCleared();
+      return true;
+    }
+  });
+}
+
+function markAlertsRead(){
+  if(DB.alertLog.some(a => !a.read)){
+    DB.alertLog.forEach(a => { a.read = true; });
+    saveDB();
+    updateAlertBadge();
+  }
+}
+
+// Recent activity, opened from the topbar bell (Dashboard only). Shows
+// only the activity log, with a gear icon that opens Alert types.
+function openRecentActivityModal(){
+  openModal({
+    title: '',
+    body: `
+      <div class="panel-head" style="padding:0 0 14px;margin:-4px 0 14px;border-bottom:1px solid var(--line);">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="icon-btn" id="btnAlertTypesFromPopover" aria-label="Alert types" title="Alert types">${ICONS.settings}</button>
+          <h3 style="font-size:15.5px;">Recent activity</h3>
+        </div>
+        <button class="btn btn-sm" id="btnClearAlertsPopover">Clear log</button>
+      </div>
+      <div id="alertLogWrapPopover">${recentActivityRowsHTML()}</div>
+    `,
+    confirmLabel: 'Close',
+    onConfirm: () => true
+  });
+  document.getElementById('btnAlertTypesFromPopover').addEventListener('click', openAlertTypesModal);
+  document.getElementById('btnClearAlertsPopover').addEventListener('click', () => {
+    clearActivityLog(() => {
+      const wrap = document.getElementById('alertLogWrapPopover');
+      if(wrap) wrap.innerHTML = recentActivityRowsHTML();
+    });
+  });
+  markAlertsRead();
+}
+
+/* ---------------------------------------------------------------
    Settings
    --------------------------------------------------------------- */
 function renderSettings(){
-  setTopbar('Settings', 'School details, password and data backup');
+  setTopbar('Settings', 'School details, password, alerts and data backup');
   setContent(`
     <div class="panel">
       <div class="panel-head"><h3>Cloud sync</h3><div class="sub">Whether changes here show up for everyone using this link</div></div>
