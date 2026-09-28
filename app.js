@@ -619,7 +619,7 @@ function renderShell(){
     <div class="role-pill"><span class="dot"></span>${ROLE_LABELS[SESSION.role] || 'Guest'} access</div>
     ${cloudDocRef ? `<div class="role-pill" style="background:rgba(255,255,255,0.06);"><span class="dot" style="background:#2F8F5B;"></span>Cloud sync on</div>` : ''}
     <button class="nav-item" id="btnLogout">${ICONS.logout}<span>Log out</span></button>
-    <div class="app-copyright">\u00a9 2026 Naseer ISM Android All rights reserved.</div>`;
+    <div class="app-copyright">\u00a9 2026 Naseer@GitHub, Inc.</div>`;
   document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => navigate(btn.dataset.tab));
   });
@@ -1219,7 +1219,7 @@ function openAnnouncementSendList(ids, message, channel){
 
 function openFeeModal(id, presetStudentId){
   const editing = id ? feeById(id) : null;
-  const presetTypes = ['Tuition','Transport','Books','Exam','Previous year outstanding due'];
+  const presetTypes = ['Tuition','Transport','Hostel','Exam','Previous year outstanding due'];
   const isCustomType = editing && !presetTypes.includes(editing.type);
   openModal({
     title: editing ? `Edit fee ${editing.id}` : 'Add fee record',
@@ -1242,7 +1242,7 @@ function openFeeModal(id, presetStudentId){
         <div class="field"><label>Fee type</label><select id="f_type">
           <option ${editing&&editing.type==='Tuition'?'selected':''}>Tuition</option>
           <option ${editing&&editing.type==='Transport'?'selected':''}>Transport</option>
-          <option ${editing&&editing.type==='Books'?'selected':''}>Books</option>
+          <option ${editing&&editing.type==='Hostel'?'selected':''}>Hostel</option>
           <option ${editing&&editing.type==='Exam'?'selected':''}>Exam</option>
           <option ${editing&&editing.type==='Previous year outstanding due'?'selected':''}>Previous year outstanding due</option>
           <option value="Other" ${isCustomType?'selected':''}>Other</option>
@@ -1432,7 +1432,7 @@ function openPaymentModal(){
           <option value="">All fee types</option>
           <option>Tuition</option>
           <option>Transport</option>
-          <option>Books</option>
+          <option>Hostel</option>
           <option>Exam</option>
           <option>Previous year outstanding due</option>
           <option value="Other">Other</option>
