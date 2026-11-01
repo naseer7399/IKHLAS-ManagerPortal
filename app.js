@@ -44,7 +44,7 @@ const ICONS = {
   grad: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 2.7 3 6 3s6-1.5 6-3v-4.5"/></svg>'
 };
 
- ---------------------------------------------------------------
+/* ---------------------------------------------------------------
    Alerts — internal Management notifications (separate from the
    Notifications tab, which messages parents). Each type below can
    be switched on/off from the Alerts tab. When enabled, an entry is
@@ -127,7 +127,7 @@ function checkBiweeklyDigest(){
   }
 }
 
- ---------------------------------------------------------------
+/* ---------------------------------------------------------------
    Seed data — reflects the school's example records
    --------------------------------------------------------------- */
 function seedData(){
@@ -182,7 +182,7 @@ let DB = null;
 let SESSION = { role: null, name: '' };
 let VIEW = { tab: 'dashboard', params: {} };
 
- ---------------------------------------------------------------
+/* ---------------------------------------------------------------
    Persistence
    --------------------------------------------------------------- */
 function backfillDB(data){
@@ -248,7 +248,7 @@ function saveSession(){
   sessionStorage.setItem(SESSION_KEY, JSON.stringify(SESSION));
 }
 
- ---------------------------------------------------------------
+/* ---------------------------------------------------------------
    Optional cloud sync (Firebase) — see firebase-config.js.
    When not configured, every function here is a harmless no-op and
    the app behaves exactly as it did with localStorage only.
@@ -279,7 +279,7 @@ function isUserBusy(){
   const typing = active && ['INPUT','TEXTAREA','SELECT'].includes(active.tagName);
   return modalOpen || typing;
 }
- ---------------------------------------------------------------
+/* ---------------------------------------------------------------
    Cloud storage layout, schema 2 — ONE FIRESTORE DOCUMENT PER RECORD
    ---------------------------------------------------------------
    Why: Firestore documents are limited to 1 MiB. The old layout kept
@@ -330,7 +330,7 @@ let cloudFlushScheduled = false;
 let cloudRetryTimer = null;
 let cloudRenderTimer = null;
 
- ---------- small helpers ---------- */
+/* ---------- small helpers ---------- */
 // JSON with sorted keys and no undefined values, so equal data always gives an equal signature.
 function cloudStable(v){
   if(v === null || typeof v !== 'object') return JSON.stringify(v);   // undefined/function -> undefined
@@ -359,7 +359,7 @@ function cloudKey(id){
 function cloudPath(col, key){ return CLOUD_DATA + '/' + col + '/' + key; }
 function cloudUserEmail(){ return (cloudUser && cloudUser.email) || 'unknown'; }
 
- ---------- DB  ->  documents ---------- */
+/* ---------- DB  ->  documents ---------- */
 // Returns Map(path -> { col, sig }) describing every document the cloud should hold for this DB.
 // `dups` (optional array) collects records whose id is used twice (they would overwrite each other).
 function cloudSplit(src, dups){
@@ -400,7 +400,7 @@ function cloudSplit(src, dups){
   return out;
 }
 
- ---------- documents  ->  DB ---------- */
+/* ---------- documents  ->  DB ---------- */
 function cloudCompose(cache){
   const buckets = {};
   CLOUD_ARRAY_COLS.forEach(c => { buckets[c] = []; cloudNext[c] = 0; });
@@ -512,7 +512,7 @@ function cloudScheduleRender(tries){
   }, 200);
 }
 
- ---------- DB  ->  cloud (only what changed) ---------- */
+/* ---------- DB  ->  cloud (only what changed) ---------- */
 function cloudAfterSave(){
   if(!cloudDocRef) return;
   if(cloudMode === 'legacy'){ legacyCloudSave(); return; }
@@ -597,7 +597,7 @@ function cloudFlush(){
   });
 }
 
- ---------- cloud  ->  DB (listeners) ---------- */
+/* ---------- cloud  ->  DB (listeners) ---------- */
 // Starts one listener per collection/document. Resolves when the first full load is done.
 function cloudAttach(){
   const db = firebase.firestore();
@@ -678,7 +678,7 @@ function cloudTeardown(){
   cloudBase = {}; cloudOrder = {}; cloudNext = {};
 }
 
- ---------- start-up: pick the layout the cloud is using ---------- */
+/* ---------- start-up: pick the layout the cloud is using ---------- */
 function startCloudSync(){
   cloudTeardown();            // never run two sets of listeners at once
   fbuInstall();
@@ -1410,18 +1410,18 @@ function logout(){
    App shell
    --------------------------------------------------------------- */
 const NAV_ITEMS = [
-  { id:'dashboard', label:'Dashboard', icon:'dashboard', roles:['management','teacher'] }, 
+ /* { id:'dashboard', label:'Dashboard', icon:'dashboard', roles:['management','teacher'] }, */
   { id:'students',  label:'Students',  icon:'students',  roles:['management','teacher','feepayments'] },
   { id:'fees',      label:'Fees',      icon:'fees',       roles:['management'] },
   { id:'payments',  label:'Payments',  icon:'payments',   roles:['management','feepayments'] },
 /*  { id:'attendance', label:'Attendance', icon:'calendar', roles:['management','teacher'] },
   { id:'reportcards', label:'Report Cards', icon:'grad', roles:['management','teacher'] }, */
   { id:'accounts',  label:'Accounts',  icon:'accounts',   roles:['management'] },
- /* { id:'reports',   label:'Reports',   icon:'reports',    roles:['management','teacher'] }, */
+  { id:'reports',   label:'Reports',   icon:'reports',    roles:['management','teacher'] },
   { id:'notifications', label:'Notifications', icon:'bell', roles:['management'] },
   { id:'settings',  label:'Settings',  icon:'settings',   roles:['management'] },
   // External link: opens the help/about site in a new browser tab (no in-app view).
- /* { id:'about', label:'About Software', icon:'info', roles:['management','teacher','feepayments'], href:'https://naseer7399.github.io/IKHLAS-HELP/' } */
+  { id:'about', label:'About Software', icon:'info', roles:['management','teacher','feepayments'], href:'https://naseer7399.github.io/IKHLAS-HELP/' }
 ];
 
 function showApp(){
