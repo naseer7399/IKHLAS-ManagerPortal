@@ -102,14 +102,15 @@
    ------------------------------------------------------------------ */
 
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyCfnXLc7NBpWSFxttV-7kiaiTbauub-sog",
-  authDomain: "splitdbtest-iks.firebaseapp.com",
-  projectId: "splitdbtest-iks",
-  storageBucket: "splitdbtest-iks.firebasestorage.app",
-  messagingSenderId: "1071677069815",
-  appId: "1:1071677069815:web:b3a2fb12ab8db534baf6f2",
-  measurementId: "G-9ZW5CSMC0E"
+   apiKey: "AIzaSyCUOJ-D_CWS5QFbzX8k69WVUv12KJ_h0Ek",
+   authDomain: "iks-1-4v-db.firebaseapp.com",
+   projectId: "iks-1-4v-db",
+   storageBucket: "iks-1-4v-db.firebasestorage.app",
+   messagingSenderId: "911159075301",
+   appId: "1:911159075301:web:5d620a7914c4f9827f4f0c",
+   measurementId: "G-BPQG3B30WR"
 };
 
 // Flip this to true only after completing the steps above.
 const FIREBASE_ENABLED = true;
+
